@@ -3,7 +3,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main, master]
 
 jobs:
   build:
@@ -24,13 +24,43 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Extract project
+      - name: Extract Android project
+        shell: bash
         run: |
+          set -e
           rm -rf project
-          mkdir project
-          unzip -q SchoolAttendance-GitHub.zip -d project
+          mkdir -p project
 
-      - name: Build APK
+          ZIP_FILE=$(find . -maxdepth 2 -type f -iname '*.zip' | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ZIP file not found"
+            exit 1
+          fi
+
+          echo "Using ZIP: $ZIP_FILE"
+          unzip -q "$ZIP_FILE" -d project
+
+          if [ ! -f project/settings.gradle.kts ]; then
+            echo "Android project was not extracted correctly"
+            find project -maxdepth 3 -type f
+            exit 1
+          fi
+
+      - name: Fix Compose imports
+        working-directory: project
+        shell: bash
+        run: |
+          for file in \
+            app/src/main/java/com/school/attendance/ui/AppRoot.kt \
+            app/src/main/java/com/school/attendance/ui/AttendanceScreen.kt \
+            app/src/main/java/com/school/attendance/ui/ReportsScreen.kt \
+            app/src/main/java/com/school/attendance/ui/StudentsScreen.kt
+          do
+            sed -i '/^package /a import androidx.compose.runtime.saveable.rememberSaveable' "$file"
+          done
+
+      - name: Build debug APK
         working-directory: project
         run: gradle assembleDebug --no-daemon
 
