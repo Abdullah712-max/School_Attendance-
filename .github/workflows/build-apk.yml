@@ -41,31 +41,35 @@ jobs:
           echo "Using ZIP: $ZIP_FILE"
           unzip -q "$ZIP_FILE" -d project
 
-          if [ ! -f project/settings.gradle.kts ]; then
-            echo "Android project was not extracted correctly"
-            find project -maxdepth 3 -type f
+          PROJECT_DIR=$(find project -name settings.gradle.kts -print -quit | xargs dirname)
+
+          if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/settings.gradle.kts" ]; then
+            echo "Android project was not found"
+            find project -maxdepth 4 -type f
             exit 1
           fi
 
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project at: $PROJECT_DIR"
+
       - name: Fix Compose imports
-        working-directory: project
         shell: bash
         run: |
           for file in \
-            app/src/main/java/com/school/attendance/ui/AppRoot.kt \
-            app/src/main/java/com/school/attendance/ui/AttendanceScreen.kt \
-            app/src/main/java/com/school/attendance/ui/ReportsScreen.kt \
-            app/src/main/java/com/school/attendance/ui/StudentsScreen.kt
+            "$PROJECT_DIR/app/src/main/java/com/school/attendance/ui/AppRoot.kt" \
+            "$PROJECT_DIR/app/src/main/java/com/school/attendance/ui/AttendanceScreen.kt" \
+            "$PROJECT_DIR/app/src/main/java/com/school/attendance/ui/ReportsScreen.kt" \
+            "$PROJECT_DIR/app/src/main/java/com/school/attendance/ui/StudentsScreen.kt"
           do
             sed -i '/^package /a import androidx.compose.runtime.saveable.rememberSaveable' "$file"
           done
 
       - name: Build debug APK
-        working-directory: project
+        working-directory: ${{ env.PROJECT_DIR }}
         run: gradle assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SchoolAttendance-APK
-          path: project/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
